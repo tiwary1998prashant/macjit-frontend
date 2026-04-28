@@ -1,0 +1,25 @@
+{
+  "short_name": "MacJit Garage",
+  "name": "MacJit Garage",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/staff",
+  "scope": "/",
+  "id": "macjit-staff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#F26A21",
+  "background_color": "#1E2A44",
+  "description": "MacJit — async car-garage operations. Booking · status · pay.",
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {"name": "Customer login", "short_name": "Customer", "url": "/login", "description": "Customer sign-in"},
+    {"name": "Staff login", "short_name": "Staff", "url": "/staff", "description": "Employee sign-in"}
+  ]
+}
