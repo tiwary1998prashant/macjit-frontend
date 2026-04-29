@@ -17,7 +17,7 @@ import PWAInstallBanner from "./components/PWAInstallBanner";
 const RoleRoute = ({ role, children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen bg-zinc-950 grid place-items-center text-zinc-400 font-mono text-xs">Loading...</div>;
-  if (!user) return <Navigate to={role === "customer" ? "/login" : "/staff"} replace />;
+  if (!user) return <Navigate to="/staff" replace />;
   if (user.role !== role) return <Navigate to={`/${user.role}`} replace />;
   return children;
 };
@@ -30,20 +30,19 @@ const EmployeeRoute = ({ children }) => {
   return children;
 };
 
-const Root = () => {
-  return <LandingPage />;
-};
-
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Root />} />
-          <Route path="/login" element={<LoginPage mode="customer" />} />
-          <Route path="/staff" element={<LoginPage mode="staff" />} />
+          <Route path="/" element={<LandingPage />} />
+          {/* Public customer-facing tracker — no login. */}
+          <Route path="/track" element={<CustomerPage />} />
+          <Route path="/login" element={<Navigate to="/track" replace />} />
+          <Route path="/customer" element={<Navigate to="/track" replace />} />
+          {/* Staff sign-in. */}
+          <Route path="/staff" element={<LoginPage />} />
           <Route path="/pay/:bookingId" element={<CheckoutPage />} />
-          <Route path="/customer" element={<RoleRoute role="customer"><CustomerPage /></RoleRoute>} />
           <Route path="/reception" element={<RoleRoute role="reception"><ReceptionPage /></RoleRoute>} />
           <Route path="/mechanic" element={<RoleRoute role="mechanic"><MechanicPage /></RoleRoute>} />
           <Route path="/tester" element={<RoleRoute role="tester"><TesterPage /></RoleRoute>} />

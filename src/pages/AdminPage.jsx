@@ -450,19 +450,42 @@ const EnquiriesTab = () => {
 
 
 const StaffTab = () => {
+  const { user: me } = useAuth();
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: "", phone: "", role: "mechanic" });
+  const [f, setF] = useState({ name: "", phone: "", role: "mechanic", password: "" });
   const load = () => api.get("/admin/staff").then((r) => setList(r.data));
   useEffect(() => { load(); }, []);
+
   const create = async () => {
     if (!f.name || !f.phone) return toast.error("Name + phone required");
+    if (f.password && f.password.length < 6) return toast.error("Password must be at least 6 characters");
     try {
       const r = await api.post("/admin/staff", f);
-      toast.success(`Created ${f.name} · temp password: ${r.data.temp_password}`);
-      load(); setOpen(false); setF({ name: "", phone: "", role: "mechanic" });
+      toast.success(`Created ${f.name} — initial password: ${r.data.initial_password}`);
+      load(); setOpen(false); setF({ name: "", phone: "", role: "mechanic", password: "" });
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
+
+  const remove = async (s) => {
+    if (s.id === me?.id) return toast.error("You can't remove your own account");
+    if (!window.confirm(`Remove ${s.name} (${s.role})? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/admin/staff/${s.id}`);
+      toast.success(`Removed ${s.name}`);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  const resetPwd = async (s) => {
+    if (!window.confirm(`Reset password for ${s.name}? They will be forced to set a new one on next login.`)) return;
+    try {
+      const r = await api.post(`/admin/staff/${s.id}/reset-password`);
+      toast.success(`New temp password for ${s.name}: ${r.data.initial_password}`);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
   return (
     <div className="border border-zinc-800 bg-zinc-900/40 p-6">
       <div className="flex items-center justify-between mb-4">
@@ -471,29 +494,59 @@ const StaffTab = () => {
           <DialogTrigger asChild>
             <button data-testid="add-staff-btn" className="bg-orange-500 hover:bg-orange-400 text-black font-mono text-xs uppercase tracking-widest font-bold px-3 py-1.5 flex items-center gap-1"><Plus className="w-3 h-3" />Add Employee</button>
           </DialogTrigger>
-          <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogContent className="bg-zinc-950 border-zinc-800 space-y-2">
             <DialogHeader><DialogTitle className="font-display uppercase">Onboard new employee</DialogTitle></DialogHeader>
             <input data-testid="staff-name" placeholder="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm" />
-            <input data-testid="staff-phone" placeholder="+91 phone" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm" />
+            <input data-testid="staff-phone" placeholder="Phone (e.g. 9876543210)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm" />
             <select data-testid="staff-role" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm">
               <option value="mechanic">Mechanic</option>
               <option value="reception">Reception</option>
               <option value="tester">Tester</option>
+              <option value="shopkeeper">Shopkeeper</option>
               <option value="admin">Admin</option>
             </select>
-            <p className="font-mono text-[10px] text-zinc-500">An SMS with reset link + temporary password is sent to the employee.</p>
-            <button data-testid="staff-submit" onClick={create} className="w-full bg-orange-500 hover:bg-orange-400 text-black font-display font-black uppercase tracking-widest py-3">Create + Send Invite</button>
+            <input data-testid="staff-password" placeholder="Initial password (leave blank to auto-generate)"
+              value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })}
+              className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm" />
+            <p className="font-mono text-[10px] text-zinc-500">
+              The employee signs in with their phone + this password. They will be forced to set a new password on first login.
+              The initial password stays visible to you here until they change it. We also text it to them automatically.
+            </p>
+            <button data-testid="staff-submit" onClick={create} className="w-full bg-orange-500 hover:bg-orange-400 text-black font-display font-black uppercase tracking-widest py-3">Create employee</button>
           </DialogContent>
         </Dialog>
       </div>
       <div className="space-y-2">
         {list.map((s) => (
-          <div key={s.id} className="bg-zinc-950 border border-zinc-800 px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="font-display font-bold">{s.name}</p>
-              <p className="font-mono text-[10px] text-zinc-500">{s.phone || s.username} · {s.role}</p>
+          <div key={s.id} data-testid={`staff-row-${s.id}`} className="bg-zinc-950 border border-zinc-800 px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-display font-bold truncate">{s.name} {s.id === me?.id && <span className="font-mono text-[10px] text-orange-500 ml-1">(you)</span>}</p>
+              <p className="font-mono text-[10px] text-zinc-500 truncate">{s.phone || s.username} · {s.role}</p>
+              {s.must_reset_password && s.initial_password && (
+                <p className="font-mono text-[10px] text-orange-400 mt-1">
+                  Initial password (share with employee): <span className="text-white font-bold">{s.initial_password}</span>
+                </p>
+              )}
             </div>
-            <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border ${s.active === false ? "border-red-500/40 text-red-400" : "border-emerald-500/40 text-emerald-400"}`}>{s.active === false ? "Inactive" : "Active"}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border ${s.active === false ? "border-red-500/40 text-red-400" : "border-emerald-500/40 text-emerald-400"}`}>
+                {s.active === false ? "Inactive" : "Active"}
+              </span>
+              <button
+                data-testid={`reset-pwd-${s.id}`}
+                onClick={() => resetPwd(s)}
+                title="Reset password"
+                className="text-zinc-500 hover:text-orange-500 font-mono text-[10px] uppercase tracking-widest border border-zinc-800 hover:border-orange-500 px-2 py-1"
+              >Reset pwd</button>
+              {s.id !== me?.id && (
+                <button
+                  data-testid={`remove-staff-${s.id}`}
+                  onClick={() => remove(s)}
+                  title={`Remove ${s.name}`}
+                  className="text-red-400 hover:text-red-300 p-1.5 border border-zinc-800 hover:border-red-500"
+                ><Trash className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
           </div>
         ))}
       </div>

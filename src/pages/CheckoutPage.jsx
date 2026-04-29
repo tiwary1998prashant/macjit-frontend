@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../lib/api";
 import { Wrench, Check, ShieldCheck, IndianRupee, ExternalLink, Lock, Sparkles } from "lucide-react";
 import MacJitLogo from "../components/MacJitLogo";
@@ -7,17 +7,24 @@ import { toast } from "sonner";
 
 export default function CheckoutPage() {
   const { bookingId } = useParams();
+  const [search] = useSearchParams();
+  const plate = (search.get("plate") || "").trim();
   const nav = useNavigate();
   const [booking, setBooking] = useState(null);
   const [busy, setBusy] = useState(false);
   const [paid, setPaid] = useState(false);
 
   useEffect(() => {
-    api.get(`/bookings/${bookingId}`).then((r) => {
+    if (!plate) {
+      toast.error("Open this bill from the Track page");
+      nav("/track");
+      return;
+    }
+    api.get(`/track/booking/${bookingId}`, { params: { plate } }).then((r) => {
       setBooking(r.data);
       if (r.data.paid) setPaid(true);
     }).catch(() => toast.error("Booking not found"));
-  }, [bookingId]);
+  }, [bookingId, plate, nav]);
 
   const payNow = async () => {
     setBusy(true);
@@ -26,7 +33,7 @@ export default function CheckoutPage() {
         // real Razorpay link — open it
         window.open(booking.payment_link, "_blank");
       }
-      await api.post(`/bookings/${bookingId}/pay`);
+      await api.post(`/bookings/${bookingId}/pay`, { plate_number: plate });
       setPaid(true);
       toast.success("Payment received · Thank you!");
     } catch (e) { toast.error("Payment failed — please try again"); }
