@@ -62,12 +62,6 @@ export default function LandingPage() {
             <button data-testid="nav-track" onClick={goLogin} className="bg-orange-500 hover:bg-orange-400 text-black font-display font-black uppercase tracking-widest px-4 py-2 transition-colors flex items-center gap-2">
               {user ? "Dashboard" : "Track Vehicle"} <ArrowRight className="w-3 h-3" />
             </button>
-            {!user && (
-              <button data-testid="nav-staff" onClick={goStaff}
-                className="hidden sm:inline-flex border border-zinc-700 hover:border-orange-500 hover:text-orange-500 text-zinc-300 font-mono text-[10px] uppercase tracking-widest px-3 py-2 transition-colors">
-                Staff
-              </button>
-            )}
           </div>
         </div>
       </nav>
@@ -296,24 +290,16 @@ export default function LandingPage() {
             <a href="#enquiry" className="block font-mono text-xs text-zinc-400 hover:text-orange-500 mt-1">Send enquiry</a>
             <button
               type="button"
-              data-testid="footer-staff-login"
+              data-testid="footer-terminal-link"
               onClick={goStaff}
               className="block font-mono text-xs text-zinc-400 hover:text-orange-500 mt-1 text-left"
             >
-              Staff login
+              Terminal
             </button>
           </div>
         </div>
         <div className="border-t border-zinc-900 py-4 flex flex-wrap items-center justify-between gap-2 max-w-7xl mx-auto px-6">
           <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-600">© 2026 MacJit · macjit.com · All rights reserved.</p>
-          <button
-            type="button"
-            data-testid="footer-staff-login-bottom"
-            onClick={goStaff}
-            className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 hover:text-orange-500"
-          >
-            Staff login →
-          </button>
         </div>
       </footer>
     </div>

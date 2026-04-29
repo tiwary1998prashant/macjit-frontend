@@ -26,18 +26,74 @@ export default function CheckoutPage() {
     }).catch(() => toast.error("Booking not found"));
   }, [bookingId, plate, nav]);
 
+  const loadRazorpay = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.body.appendChild(s);
+    });
+
   const payNow = async () => {
     setBusy(true);
     try {
-      if (booking.payment_link && !booking.payment_link.includes("rzp.io/test")) {
-        // real Razorpay link — open it
-        window.open(booking.payment_link, "_blank");
+      const ok = await loadRazorpay();
+      if (!ok) throw new Error("Could not load Razorpay. Check your internet connection.");
+
+      // 1. Ask backend to create a real Razorpay Order
+      const orderRes = await api.post(`/bookings/${bookingId}/razorpay/order`, { plate_number: plate });
+      const order = orderRes.data;
+
+      // 2. Open Razorpay Checkout modal
+      await new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: order.key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: order.name,
+          description: order.description,
+          order_id: order.order_id,
+          prefill: order.prefill,
+          theme: { color: "#F26A21" },
+          modal: {
+            ondismiss: () => {
+              setBusy(false);
+              reject(new Error("Payment cancelled"));
+            },
+          },
+          handler: async (resp) => {
+            try {
+              // 3. Verify the signature server-side BEFORE marking paid
+              await api.post(`/bookings/${bookingId}/razorpay/verify`, {
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_order_id: resp.razorpay_order_id,
+                razorpay_signature: resp.razorpay_signature,
+                plate_number: plate,
+              });
+              setPaid(true);
+              toast.success("Payment received · Thank you!");
+              resolve();
+            } catch (err) {
+              toast.error(err.response?.data?.detail || "Payment verification failed");
+              reject(err);
+            }
+          },
+        });
+        rzp.on("payment.failed", (resp) => {
+          toast.error(resp.error?.description || "Payment failed");
+          reject(new Error("Payment failed"));
+        });
+        rzp.open();
+      });
+    } catch (e) {
+      if (e.message !== "Payment cancelled" && e.message !== "Payment failed") {
+        toast.error(e.response?.data?.detail || e.message || "Payment failed — please try again");
       }
-      await api.post(`/bookings/${bookingId}/pay`, { plate_number: plate });
-      setPaid(true);
-      toast.success("Payment received · Thank you!");
-    } catch (e) { toast.error("Payment failed — please try again"); }
-    finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (!booking) {
@@ -45,7 +101,11 @@ export default function CheckoutPage() {
   }
 
   const items = booking.items || [];
-  const itemsTotal = items.reduce((s, i) => s + i.subtotal, 0);
+  const itemsTotal = items.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const billAmount = Number(booking.bill_amount || 0);
+  const subtotal = Number(booking.subtotal || billAmount + Number(booking.discount || 0));
+  const baseCharge = Math.max(0, subtotal - itemsTotal - Number(booking.extra_cost || 0));
+  const serviceLabel = String(booking.service_type || "service").replace(/-/g, " ");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-zinc-50 to-zinc-100">
@@ -89,20 +149,20 @@ export default function CheckoutPage() {
             <p className="text-zinc-500 mt-1 font-mono text-sm">{booking.car_make} {booking.car_model} · {booking.plate_number}</p>
 
             {/* Bill breakdown */}
-            <div className="mt-8 bg-white border border-zinc-200 shadow-sm">
+            <div className="mt-8 bg-white border border-zinc-200 shadow-sm" data-testid="bill-breakdown">
               <div className="p-6">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4">Service breakdown</p>
                 <div className="flex justify-between py-2">
-                  <span className="text-sm">{booking.service_type.replace("-", " ")} — base</span>
-                  <span className="font-mono">₹{(booking.subtotal || 0) - itemsTotal - (booking.extra_cost || 0)}</span>
+                  <span className="text-sm capitalize">{serviceLabel} — base</span>
+                  <span className="font-mono">₹{baseCharge}</span>
                 </div>
                 {items.map((it) => (
-                  <div key={it.inventory_id} className="flex justify-between py-2 text-sm">
+                  <div key={it.inventory_id || it.name} className="flex justify-between py-2 text-sm">
                     <span>{it.name} <span className="text-zinc-400">× {it.qty}</span></span>
                     <span className="font-mono">₹{it.subtotal}</span>
                   </div>
                 ))}
-                {booking.extra_cost > 0 && (
+                {Number(booking.extra_cost || 0) > 0 && (
                   <div className="flex justify-between py-2 text-sm">
                     <span>Heavy work</span>
                     <span className="font-mono">₹{booking.extra_cost}</span>
@@ -110,11 +170,11 @@ export default function CheckoutPage() {
                 )}
                 <div className="border-t border-zinc-200 mt-3 pt-3 flex justify-between text-sm">
                   <span className="text-zinc-500">Subtotal</span>
-                  <span className="font-mono">₹{booking.subtotal || booking.bill_amount}</span>
+                  <span className="font-mono">₹{subtotal}</span>
                 </div>
-                {booking.discount > 0 && (
+                {Number(booking.discount || 0) > 0 && (
                   <div className="flex justify-between text-sm text-emerald-600">
-                    <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />{booking.loyalty_tier} loyalty discount ({booking.discount_pct}%)</span>
+                    <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />{booking.loyalty_tier || ""} loyalty discount ({booking.discount_pct || 0}%)</span>
                     <span className="font-mono">−₹{booking.discount}</span>
                   </div>
                 )}
@@ -122,7 +182,7 @@ export default function CheckoutPage() {
               <div className="bg-black text-white p-6 flex items-end justify-between">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Total payable</p>
-                  <p className="font-display font-black text-5xl tracking-tighter mt-1 flex items-center"><IndianRupee className="w-9 h-9 text-orange-500" />{booking.bill_amount}</p>
+                  <p className="font-display font-black text-5xl tracking-tighter mt-1 flex items-center"><IndianRupee className="w-9 h-9 text-orange-500" />{billAmount}</p>
                 </div>
                 <ShieldCheck className="w-10 h-10 text-orange-500" />
               </div>
