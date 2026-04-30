@@ -5,7 +5,7 @@ import api from "../lib/api";
 import { StatusPill } from "../components/StatusPill";
 import { StatCard } from "../components/StatCard";
 import { NotificationBell } from "../components/NotificationBell";
-import { LogOut, Wrench, AlertTriangle, PackageX, Clock, Plus, Trash, Upload, FileSpreadsheet, Mail } from "lucide-react";
+import { LogOut, Wrench, AlertTriangle, PackageX, Clock, Plus, Trash, Upload, FileSpreadsheet, Mail, ReceiptText, Undo2, Search, Check, X as XIcon, ShoppingCart, Wrench as WrenchIcon, ExternalLink } from "lucide-react";
 import MacJitLogo from "../components/MacJitLogo";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip } from "recharts";
@@ -60,6 +60,8 @@ export default function AdminPage() {
             <TabsTrigger data-testid="tab-overview" value="overview" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Overview</TabsTrigger>
             <TabsTrigger data-testid="tab-inventory" value="inventory" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Inventory</TabsTrigger>
             <TabsTrigger data-testid="tab-bookings" value="bookings" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Bookings</TabsTrigger>
+            <TabsTrigger data-testid="tab-transactions" value="transactions" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Transactions</TabsTrigger>
+            <TabsTrigger data-testid="tab-refunds" value="refunds" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Refunds</TabsTrigger>
             <TabsTrigger data-testid="tab-pricing" value="pricing" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Pricing</TabsTrigger>
             <TabsTrigger data-testid="tab-customers" value="customers" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Customers</TabsTrigger>
             <TabsTrigger data-testid="tab-staff" value="staff" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Staff</TabsTrigger>
@@ -142,6 +144,8 @@ export default function AdminPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="transactions" className="mt-6"><TransactionsTab /></TabsContent>
+          <TabsContent value="refunds" className="mt-6"><RefundsTab onChange={load} /></TabsContent>
           <TabsContent value="pricing" className="mt-6"><PricingTab /></TabsContent>
           <TabsContent value="customers" className="mt-6"><CustomersTab /></TabsContent>
           <TabsContent value="staff" className="mt-6"><StaffTab /></TabsContent>
@@ -685,3 +689,332 @@ const HRAdminTab = () => {
   );
 };
 
+
+
+// ---------- Transactions tab (Paytm-style unified history) ----------
+const TransactionsTab = () => {
+  const [type, setType] = useState("all");
+  const [q, setQ] = useState("");
+  const [data, setData] = useState({ transactions: [], total_amount: 0, count: 0, service_count: 0, shop_count: 0 });
+  const [loading, setLoading] = useState(false);
+  const [sel, setSel] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/admin/transactions?type=${type}&q=${encodeURIComponent(q)}`);
+      setData(r.data);
+    } catch (e) { toast.error("Failed to load transactions"); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [type]);
+
+  const fmtTime = (s) => {
+    if (!s) return "—";
+    const d = new Date(s);
+    return d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  };
+  const groupByDate = () => {
+    const groups = {};
+    (data.transactions || []).forEach((t) => {
+      const k = (t.ts || "").slice(0, 10) || "Unknown";
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(t);
+    });
+    return Object.entries(groups);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header summary */}
+      <div className="border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Net revenue (after refunds)</p>
+            <p className="font-display font-black text-3xl text-orange-500">₹{Math.round(data.total_amount || 0).toLocaleString("en-IN")}</p>
+            <p className="font-mono text-[10px] text-zinc-500">
+              {data.count} txns · {data.service_count} service · {data.shop_count} shop
+              {data.refund_count > 0 && (
+                <span className="text-red-400"> · {data.refund_count} refunds (−₹{Math.round(data.refund_amount || 0).toLocaleString("en-IN")})</span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-zinc-950 border border-zinc-800">
+              {[["all", "All"], ["service", "Services"], ["shop", "Shop"]].map(([v, lbl]) => (
+                <button
+                  key={v}
+                  data-testid={`txn-filter-${v}`}
+                  onClick={() => setType(v)}
+                  className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest font-bold transition-colors ${type === v ? "bg-orange-500 text-black" : "text-zinc-400 hover:text-orange-500"}`}
+                >{lbl}</button>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              <input
+                data-testid="txn-search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") load(); }}
+                placeholder="Customer, plate, item…"
+                className="bg-zinc-950 border border-zinc-800 pl-9 pr-3 py-2 font-mono text-xs focus:border-orange-500 outline-none w-64"
+              />
+            </div>
+            <button data-testid="txn-search-btn" onClick={load} className="bg-orange-500 hover:bg-orange-400 text-black font-mono text-[10px] uppercase tracking-widest font-bold px-3 py-2">Search</button>
+          </div>
+        </div>
+
+        {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+        {!loading && data.transactions.length === 0 && (
+          <p className="text-sm text-zinc-500">No transactions match the filter.</p>
+        )}
+
+        {/* Paytm-style date-grouped list */}
+        <div className="space-y-5">
+          {groupByDate().map(([date, items]) => (
+            <div key={date}>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2 px-1">
+                {date === "Unknown" ? "Unknown" : new Date(date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+              </p>
+              <div className="divide-y divide-zinc-800 border border-zinc-800 bg-zinc-950">
+                {items.map((t) => (
+                  <button
+                    key={`${t.kind}-${t.id}`}
+                    data-testid={`txn-${t.kind}-${t.id}`}
+                    onClick={() => setSel(t)}
+                    className="w-full text-left px-4 py-3 hover:bg-zinc-900 transition-colors flex items-center gap-4"
+                  >
+                    <div className={`w-10 h-10 flex items-center justify-center ${
+                      t.kind === "service" ? "bg-orange-500/10 text-orange-500" :
+                      t.kind === "refund" ? "bg-red-500/10 text-red-400" :
+                      "bg-blue-500/10 text-blue-400"
+                    }`}>
+                      {t.kind === "service" ? <WrenchIcon className="w-4 h-4" /> :
+                       t.kind === "refund" ? <Undo2 className="w-4 h-4" /> :
+                       <ShoppingCart className="w-4 h-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display font-bold truncate">{t.customer_name}</p>
+                      <p className="font-mono text-[10px] text-zinc-500 truncate uppercase">
+                        {t.kind} · {t.title}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-display font-black ${t.amount < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {t.amount < 0 ? "− " : "+ "}₹{Math.abs(Math.round(t.amount)).toLocaleString("en-IN")}
+                      </p>
+                      <p className="font-mono text-[10px] text-zinc-500">{fmtTime(t.ts).split(", ").pop()} · {t.method}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Detail dialog */}
+      <Dialog open={!!sel} onOpenChange={(v) => { if (!v) setSel(null); }}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase flex items-center gap-2">
+              {sel?.kind === "service" ? <WrenchIcon className="w-4 h-4 text-orange-500" /> : <ShoppingCart className="w-4 h-4 text-blue-400" />}
+              Transaction · #{sel?.ref}
+            </DialogTitle>
+          </DialogHeader>
+          {sel && (
+            <div className="space-y-3 text-sm">
+              <div className="bg-zinc-900 border border-zinc-800 p-4">
+                <p className={`font-display font-black text-3xl ${sel.amount < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                  {sel.amount < 0 ? "− " : ""}₹{Math.abs(Math.round(sel.amount)).toLocaleString("en-IN")}
+                </p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-1">{sel.method} · {fmtTime(sel.ts)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Customer</p>
+                  <p className="font-bold">{sel.customer_name}</p>
+                  <p className="font-mono text-[10px] text-zinc-500">{sel.customer_phone || "—"}</p>
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Type</p>
+                  <p className="font-bold uppercase">{sel.kind}</p>
+                  <p className="font-mono text-[10px] text-zinc-500">{sel.title}</p>
+                </div>
+              </div>
+              {sel.kind === "service" && sel.extra && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Mechanic</p>
+                    <p className="text-sm">{sel.extra.mechanic}</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Bay</p>
+                    <p className="text-sm">{sel.extra.bay}</p>
+                  </div>
+                </div>
+              )}
+              {sel.kind === "shop" && sel.extra?.refund_status && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 p-2">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-yellow-400">
+                    Refund {sel.extra.refund_status}
+                    {sel.extra.refunded_amount ? ` · ₹${Math.round(sel.extra.refunded_amount)}` : ""}
+                  </p>
+                </div>
+              )}
+              {sel.items?.length > 0 && (
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Items ({sel.items.length})</p>
+                  <ul className="bg-zinc-900 border border-zinc-800 divide-y divide-zinc-800 text-xs">
+                    {sel.items.map((it, i) => (
+                      <li key={i} className="flex items-center justify-between px-3 py-2">
+                        <span>{it.name} <span className="text-zinc-500">× {it.qty}</span></span>
+                        <span className="font-bold">₹{Math.round(it.subtotal || it.price * it.qty)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {sel.invoice_url && (
+                <a href={sel.invoice_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-black font-display font-black uppercase tracking-widest px-4 py-2 text-xs">
+                  <ReceiptText className="w-3.5 h-3.5" /> Open invoice <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              {sel.extra?.razorpay_payment_id && (
+                <p className="font-mono text-[10px] text-zinc-500">Razorpay ref: {sel.extra.razorpay_payment_id}</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ---------- Refunds tab (admin approval queue) ----------
+const RefundsTab = ({ onChange }) => {
+  const [list, setList] = useState([]);
+  const [filter, setFilter] = useState("PENDING");
+  const [decideOn, setDecideOn] = useState(null); // {refund, decision}
+  const [note, setNote] = useState("");
+
+  const load = async () => {
+    try {
+      const r = await api.get(`/admin/refunds${filter !== "ALL" ? `?status=${filter}` : ""}`);
+      setList(r.data);
+    } catch (e) { toast.error("Failed to load refunds"); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  const submit = async () => {
+    if (!decideOn) return;
+    try {
+      await api.post(`/admin/refunds/${decideOn.refund.id}/decision`, { decision: decideOn.decision, note });
+      toast.success(`Refund ${decideOn.decision}`);
+      setDecideOn(null); setNote("");
+      load();
+      if (onChange) onChange();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  const badge = (status) => {
+    const map = {
+      PENDING: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400",
+      APPROVED: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
+      REJECTED: "bg-zinc-700 text-zinc-400 border-zinc-600",
+    };
+    return <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border ${map[status]}`}>{status}</span>;
+  };
+
+  return (
+    <div className="border border-zinc-800 bg-zinc-900/40 p-6">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Refund requests · {list.length}</p>
+        <div className="flex bg-zinc-950 border border-zinc-800">
+          {["PENDING", "APPROVED", "REJECTED", "ALL"].map((f) => (
+            <button
+              key={f}
+              data-testid={`refund-filter-${f}`}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest font-bold ${filter === f ? "bg-orange-500 text-black" : "text-zinc-400 hover:text-orange-500"}`}
+            >{f}</button>
+          ))}
+        </div>
+      </div>
+
+      {list.length === 0 && <p className="text-sm text-zinc-500">No refund requests in this view.</p>}
+
+      <div className="space-y-2">
+        {list.map((r) => (
+          <div key={r.id} data-testid={`refund-row-${r.id}`} className="bg-zinc-950 border border-zinc-800 p-4">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+              <div>
+                <p className="font-display font-bold">
+                  ₹{Math.round(r.amount)} · {r.customer_name || "Walk-in"}
+                  <span className="ml-2">{badge(r.status)}</span>
+                </p>
+                <p className="font-mono text-[10px] text-zinc-500">
+                  Sale #{r.sale_id.slice(0, 8)} · raised by {r.raised_by_name} · {new Date(r.raised_at).toLocaleString()}
+                </p>
+              </div>
+              {r.status === "PENDING" ? (
+                <div className="flex gap-2">
+                  <button data-testid={`refund-approve-${r.id}`} onClick={() => { setDecideOn({ refund: r, decision: "approved" }); setNote(""); }} className="bg-emerald-500 hover:bg-emerald-400 text-black font-mono text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 flex items-center gap-1"><Check className="w-3 h-3" /> Approve</button>
+                  <button data-testid={`refund-reject-${r.id}`} onClick={() => { setDecideOn({ refund: r, decision: "rejected" }); setNote(""); }} className="border border-red-500/50 hover:bg-red-500/10 text-red-400 font-mono text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 flex items-center gap-1"><XIcon className="w-3 h-3" /> Reject</button>
+                </div>
+              ) : (
+                r.decided_by_name && (
+                  <p className="font-mono text-[10px] text-zinc-500">
+                    by {r.decided_by_name} · {new Date(r.decided_at).toLocaleString()}
+                  </p>
+                )
+              )}
+            </div>
+            <p className="text-xs text-zinc-300 italic mb-2">"{r.reason}"</p>
+            {r.decision_note && <p className="text-xs text-zinc-400">Admin note: {r.decision_note}</p>}
+            <div className="bg-zinc-900 border border-zinc-800 mt-2">
+              {(r.items || []).map((it, idx) => (
+                <div key={idx} className="flex items-center justify-between px-3 py-1.5 text-xs border-b border-zinc-800 last:border-0">
+                  <span>{it.name} <span className="text-zinc-500">({it.sku})</span> × {it.qty}</span>
+                  <span className="font-bold">₹{Math.round(it.subtotal || it.price * it.qty)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Dialog open={!!decideOn} onOpenChange={(v) => { if (!v) { setDecideOn(null); setNote(""); } }}>
+        <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase flex items-center gap-2">
+              <Undo2 className="w-4 h-4 text-orange-500" />
+              {decideOn?.decision === "approved" ? "Approve refund" : "Reject refund"}
+            </DialogTitle>
+          </DialogHeader>
+          {decideOn && (
+            <div className="space-y-3">
+              <div className="bg-zinc-900 border border-zinc-800 p-3">
+                <p className="font-display font-bold">₹{Math.round(decideOn.refund.amount)} · {decideOn.refund.customer_name || "Walk-in"}</p>
+                <p className="font-mono text-[10px] text-zinc-500">Reason: "{decideOn.refund.reason}"</p>
+              </div>
+              <textarea data-testid="refund-decision-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note (optional)" rows={3} className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm focus:border-orange-500 outline-none" />
+              {decideOn.decision === "approved" && (
+                <p className="text-xs text-emerald-400">Approving will restock the items and mark the sale as refunded.</p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => setDecideOn(null)} className="flex-1 border border-zinc-700 text-zinc-300 font-mono text-xs uppercase tracking-widest py-2.5">Cancel</button>
+                <button
+                  data-testid="refund-decision-submit"
+                  onClick={submit}
+                  className={`flex-1 font-display font-black uppercase tracking-widest py-2.5 ${decideOn.decision === "approved" ? "bg-emerald-500 hover:bg-emerald-400 text-black" : "bg-red-500 hover:bg-red-400 text-white"}`}
+                >Confirm</button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};

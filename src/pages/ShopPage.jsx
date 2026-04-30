@@ -1,36 +1,72 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useGarageWS } from "../hooks/useWebSocket";
 import api from "../lib/api";
 import { NotificationBell } from "../components/NotificationBell";
 import { StatCard } from "../components/StatCard";
-import { LogOut, Wrench, Search, Plus, Minus, ShoppingCart, IndianRupee, X, Receipt } from "lucide-react";
+import { LogOut, Wrench, Search, Plus, Minus, ShoppingCart, IndianRupee, X, Receipt, Undo2, ChevronLeft, ChevronRight } from "lucide-react";
 import MacJitLogo from "../components/MacJitLogo";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+
+const PAGE_SIZE = 12;
 
 export default function ShopPage() {
   const { user, token, logout } = useAuth();
   const [inventory, setInventory] = useState([]);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [page, setPage] = useState(1);
   const [cart, setCart] = useState([]); // [{id, name, sku, price, qty, stock}]
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [sales, setSales] = useState([]);
   const [stats, setStats] = useState({});
+  const [refunds, setRefunds] = useState([]);
   const [tick, setTick] = useState(0);
   const [lastSale, setLastSale] = useState(null);
+  const [refundFor, setRefundFor] = useState(null); // sale obj or null
+  const [refundReason, setRefundReason] = useState("");
 
   const load = async () => {
-    const [inv, sl, st] = await Promise.all([
+    const [inv, sl, st, rf] = await Promise.all([
       api.get("/inventory"), api.get("/shop/sales"), api.get("/shop/stats"),
+      api.get("/shop/refunds").catch(() => ({ data: [] })),
     ]);
-    setInventory(inv.data); setSales(sl.data); setStats(st.data);
+    setInventory(inv.data); setSales(sl.data); setStats(st.data); setRefunds(rf.data);
   };
   useEffect(() => { load(); }, []);
-  useGarageWS(token, (e) => { if (e.type === "SHOP_SALE") { load(); setTick((t) => t + 1); } });
+  useGarageWS(token, (e) => {
+    if (e.type === "SHOP_SALE" || (e.type || "").startsWith("REFUND_")) { load(); setTick((t) => t + 1); }
+  });
 
-  const filtered = inventory.filter((i) => i.stock > 0 && (i.name.toLowerCase().includes(search.toLowerCase()) || i.sku.toLowerCase().includes(search.toLowerCase())));
+  const categories = useMemo(() => {
+    const set = new Set();
+    inventory.forEach((i) => { if (i.category) set.add(i.category); });
+    return ["all", ...Array.from(set).sort()];
+  }, [inventory]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return inventory.filter((i) =>
+      i.stock > 0
+      && (category === "all" || (i.category || "") === category)
+      && (i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q))
+    );
+  }, [inventory, search, category]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, category]);
+
   const cartTotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+
+  const refundsBySale = useMemo(() => {
+    const m = {};
+    refunds.forEach((r) => { m[r.sale_id] = r; });
+    return m;
+  }, [refunds]);
 
   const addToCart = (it) => {
     setCart((prev) => {
@@ -59,6 +95,27 @@ export default function ShopPage() {
       setCart([]); setCustomer({ name: "", phone: "" });
       load();
     } catch (e) { toast.error(e.response?.data?.detail || "Checkout failed"); }
+  };
+
+  const submitRefund = async () => {
+    if (!refundFor) return;
+    if (!refundReason.trim()) return toast.error("Please give a reason");
+    try {
+      await api.post("/shop/refunds", { sale_id: refundFor.id, reason: refundReason.trim() });
+      toast.success("Refund request sent to admin for approval");
+      setRefundFor(null); setRefundReason("");
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed to raise refund"); }
+  };
+
+  const refundBadge = (status) => {
+    if (!status) return null;
+    const map = {
+      PENDING: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400",
+      APPROVED: "bg-blue-500/10 border-blue-500/30 text-blue-400",
+      REJECTED: "bg-zinc-700 text-zinc-400 border-zinc-600",
+    };
+    return <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border ${map[status] || ""}`}>Refund {status}</span>;
   };
 
   return (
@@ -91,16 +148,28 @@ export default function ShopPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Catalog */}
           <div className="lg:col-span-2 border border-zinc-800 bg-zinc-900/40 p-6">
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input data-testid="shop-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts (SKU, name)..." className="w-full bg-zinc-950 border border-zinc-800 pl-10 pr-3 py-2.5 font-mono text-sm focus:border-orange-500 outline-none" />
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input data-testid="shop-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts (SKU, name, category)..." className="w-full bg-zinc-950 border border-zinc-800 pl-10 pr-3 py-2.5 font-mono text-sm focus:border-orange-500 outline-none" />
+              </div>
+              <select
+                data-testid="shop-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 px-3 py-2.5 font-mono text-sm focus:border-orange-500 outline-none uppercase tracking-widest"
+              >
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c === "all" ? "All categories" : c}</option>
+                ))}
+              </select>
             </div>
-            <div className="grid sm:grid-cols-2 gap-2 max-h-[600px] overflow-y-auto">
-              {filtered.map((i) => (
+            <div className="grid sm:grid-cols-2 gap-2">
+              {pageItems.map((i) => (
                 <button key={i.id} data-testid={`shop-item-${i.id}`} onClick={() => addToCart(i)} className="text-left bg-zinc-950 border border-zinc-800 hover:border-orange-500 transition-colors p-3 flex items-center justify-between">
                   <div>
                     <p className="font-display font-bold text-sm">{i.name}</p>
-                    <p className="font-mono text-[10px] text-zinc-500">{i.sku} · stock {i.stock}</p>
+                    <p className="font-mono text-[10px] text-zinc-500">{i.sku} · {i.category} · stock {i.stock}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-display font-black">₹{i.price}</span>
@@ -110,6 +179,20 @@ export default function ShopPage() {
               ))}
               {filtered.length === 0 && <p className="text-sm text-zinc-500 col-span-2">No matching items</p>}
             </div>
+
+            {/* Pagination */}
+            {filtered.length > PAGE_SIZE && (
+              <div className="mt-4 flex items-center justify-between border-t border-zinc-800 pt-3" data-testid="shop-pagination">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                  {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button data-testid="page-prev" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="p-2 border border-zinc-800 hover:border-orange-500 hover:text-orange-500 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                  <span className="font-mono text-xs px-3">Page {safePage} / {totalPages}</span>
+                  <button data-testid="page-next" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="p-2 border border-zinc-800 hover:border-orange-500 hover:text-orange-500 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cart */}
@@ -165,27 +248,76 @@ export default function ShopPage() {
           </aside>
         </div>
 
-        {/* Recent sales */}
+        {/* Recent sales + refund actions */}
         <div className="border border-zinc-800 bg-zinc-900/40 p-6">
           <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-3">Recent counter sales</p>
           <div className="space-y-2">
-            {sales.slice(0, 10).map((s) => (
-              <div key={s.id} className="bg-zinc-950 border border-zinc-800 p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-display font-bold">{s.customer_name} <span className="text-zinc-500 font-normal text-xs">· {s.items.length} item(s)</span></p>
-                  <p className="font-mono text-[10px] text-zinc-500">{new Date(s.created_at).toLocaleString()} · {s.payment_method}</p>
+            {sales.slice(0, 15).map((s) => {
+              const r = refundsBySale[s.id];
+              const status = r?.status || s.refund_status;
+              const canRefund = s.paid && !status;
+              return (
+                <div key={s.id} className="bg-zinc-950 border border-zinc-800 p-3 flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="font-display font-bold">{s.customer_name} <span className="text-zinc-500 font-normal text-xs">· {s.items.length} item(s) · #{s.id.slice(0,8)}</span></p>
+                    <p className="font-mono text-[10px] text-zinc-500">{new Date(s.created_at).toLocaleString()} · {s.payment_method}</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-display font-bold">₹{s.total}</span>
+                    <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 ${s.paid ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-orange-600/10 border border-orange-600/30 text-orange-500"}`}>{s.paid ? "Paid" : "Unpaid"}</span>
+                    {refundBadge(status)}
+                    {!s.paid && <button data-testid={`mark-paid-${s.id}`} onClick={async () => { await api.post(`/shop/sales/${s.id}/pay`); load(); }} className="bg-emerald-500 hover:bg-emerald-400 text-black font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1">Mark Paid</button>}
+                    {canRefund && (
+                      <button
+                        data-testid={`refund-${s.id}`}
+                        onClick={() => { setRefundFor(s); setRefundReason(""); }}
+                        className="border border-yellow-500/50 hover:bg-yellow-500/10 text-yellow-400 font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1 flex items-center gap-1"
+                      ><Undo2 className="w-3 h-3" /> Refund</button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-display font-bold">₹{s.total}</span>
-                  <span className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 ${s.paid ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-orange-600/10 border border-orange-600/30 text-orange-500"}`}>{s.paid ? "Paid" : "Unpaid"}</span>
-                  {!s.paid && <button data-testid={`mark-paid-${s.id}`} onClick={async () => { await api.post(`/shop/sales/${s.id}/pay`); load(); }} className="bg-emerald-500 hover:bg-emerald-400 text-black font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1">Mark Paid</button>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {sales.length === 0 && <p className="text-sm text-zinc-500">No counter sales yet</p>}
           </div>
         </div>
       </main>
+
+      {/* Refund dialog */}
+      <Dialog open={!!refundFor} onOpenChange={(v) => { if (!v) { setRefundFor(null); setRefundReason(""); } }}>
+        <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase">Raise refund request</DialogTitle>
+          </DialogHeader>
+          {refundFor && (
+            <div className="space-y-3">
+              <div className="bg-zinc-900 border border-zinc-800 p-3">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Sale</p>
+                <p className="font-display font-bold">#{refundFor.id.slice(0, 8)} · ₹{refundFor.total}</p>
+                <p className="font-mono text-[10px] text-zinc-500">{refundFor.customer_name} · {refundFor.items.length} item(s)</p>
+                <ul className="mt-2 space-y-0.5 text-xs text-zinc-300">
+                  {refundFor.items.map((it, idx) => (
+                    <li key={idx}>· {it.name} × {it.qty} <span className="text-zinc-500">(₹{it.subtotal})</span></li>
+                  ))}
+                </ul>
+              </div>
+              <textarea
+                data-testid="refund-reason"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Reason (e.g. customer returned defective part)"
+                rows={3}
+                className="w-full bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-sm focus:border-orange-500 outline-none"
+              />
+              <p className="text-xs text-zinc-500">Admin must approve before stock is restored. The customer will see the refund once approved.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setRefundFor(null)} className="flex-1 border border-zinc-700 text-zinc-300 font-mono text-xs uppercase tracking-widest py-2.5">Cancel</button>
+                <button data-testid="refund-submit" onClick={submitRefund} className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-display font-black uppercase tracking-widest py-2.5">Send for approval</button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
