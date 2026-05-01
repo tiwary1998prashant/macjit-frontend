@@ -117,6 +117,22 @@ export default function MechanicPage() {
                   <StatusPill status={active.status} />
                 </div>
 
+                {active.qa_fail_reasons?.length > 0 && (
+                  <div className="mb-4 border border-red-500/40 bg-red-950/30 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-red-400">QA Failed — Fix required</p>
+                      {active.qa_fail_tester_name && <p className="font-mono text-[10px] text-zinc-500 ml-auto">by {active.qa_fail_tester_name}</p>}
+                    </div>
+                    <ul className="space-y-1">
+                      {active.qa_fail_reasons.map((r, i) => (
+                        <li key={i} className="font-mono text-xs text-red-300 before:content-['•'] before:mr-2 before:text-red-500">{r}</li>
+                      ))}
+                    </ul>
+                    {active.qa_fail_notes && <p className="mt-2 font-mono text-xs text-zinc-400">Note: {active.qa_fail_notes}</p>}
+                  </div>
+                )}
+
                 {active.status === "ASSIGNED" && (
                   <button data-testid="mechanic-start-btn" onClick={start} className="mt-5 w-full bg-emerald-500 hover:bg-emerald-400 text-black font-display font-black uppercase tracking-[0.3em] text-lg py-6 border-b-4 border-emerald-700 active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center gap-2">
                     <Play className="w-5 h-5 fill-black" /> Start Service

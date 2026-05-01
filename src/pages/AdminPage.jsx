@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { DigitalCardsPanel } from "../components/DigitalCardsPanel";
 
 export default function AdminPage() {
   const { user, token, logout } = useAuth();
@@ -69,6 +70,7 @@ export default function AdminPage() {
             <TabsTrigger data-testid="tab-staff" value="staff" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Staff</TabsTrigger>
             <TabsTrigger data-testid="tab-enquiries" value="enquiries" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Enquiries</TabsTrigger>
             <TabsTrigger data-testid="tab-hr" value="hr" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">HR</TabsTrigger>
+            <TabsTrigger data-testid="tab-cards" value="cards" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Service Cards</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6 grid lg:grid-cols-3 gap-6">
@@ -186,6 +188,13 @@ export default function AdminPage() {
           <TabsContent value="staff" className="mt-6"><StaffTab /></TabsContent>
           <TabsContent value="enquiries" className="mt-6"><EnquiriesTab /></TabsContent>
           <TabsContent value="hr" className="mt-6"><HRAdminTab /></TabsContent>
+          <TabsContent value="cards" className="mt-6">
+            <div className="border border-zinc-800 bg-zinc-900/40 p-6">
+              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-1">Admin</p>
+              <h3 className="font-display font-black text-xl uppercase mb-5">Digital Service Cards</h3>
+              <DigitalCardsPanel isAdmin={true} />
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
     </div>

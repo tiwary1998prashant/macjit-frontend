@@ -5,11 +5,12 @@ import api from "../lib/api";
 import { StatusPill } from "../components/StatusPill";
 import { StatCard } from "../components/StatCard";
 import { NotificationBell } from "../components/NotificationBell";
-import { LogOut, Wrench, Plus, IndianRupee } from "lucide-react";
+import { LogOut, Wrench, Plus, IndianRupee, CreditCard } from "lucide-react";
 import MacJitLogo from "../components/MacJitLogo";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { DigitalCardsPanel } from "../components/DigitalCardsPanel";
 
 export default function ReceptionPage() {
   const { user, token, logout } = useAuth();
@@ -20,6 +21,7 @@ export default function ReceptionPage() {
   const [stats, setStats] = useState({});
   const [services, setServices] = useState([]);
   const [tick, setTick] = useState(0);
+  const [showCards, setShowCards] = useState(false);
 
   const load = async () => {
     const [b, c, m, ba, s, sv] = await Promise.all([
@@ -66,6 +68,22 @@ export default function ReceptionPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="border border-zinc-800 bg-zinc-900/40">
+          <button onClick={() => setShowCards(v => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-zinc-800/30 transition-colors">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-orange-500" />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-orange-500">Digital Service Cards</span>
+            </div>
+            <span className="font-mono text-[10px] text-zinc-500">{showCards ? "▲ Hide" : "▼ Show"}</span>
+          </button>
+          {showCards && (
+            <div className="px-6 pb-6 border-t border-zinc-800 pt-5">
+              <DigitalCardsPanel isAdmin={false} />
+            </div>
+          )}
         </div>
       </main>
     </div>

@@ -25,6 +25,8 @@ export default function CustomerPage() {
   const [data, setData] = useState(null);   // { active, history, invoice_url }
   const [busy, setBusy] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [otpVal, setOtpVal] = useState("");
+  const [otpResent, setOtpResent] = useState(false);
 
   const lookup = async (p = plate) => {
     const q = (p || "").trim().toUpperCase();
@@ -54,13 +56,26 @@ export default function CustomerPage() {
   const active = data?.active;
 
   const approve = async () => {
+    if (!otpVal.trim()) return toast.error("Enter the OTP sent to your registered phone");
     setBusy(true);
     try {
-      await api.post(`/bookings/${active.id}/approve`, { plate_number: active.plate_number });
+      await api.post(`/bookings/${active.id}/approve`, { otp: otpVal.trim() });
       toast.success("Approved — your mechanic can continue.");
+      setOtpVal("");
       lookup(plate);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not approve");
+      toast.error(err.response?.data?.detail || "Invalid or expired OTP");
+    } finally { setBusy(false); }
+  };
+
+  const resendOtp = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/bookings/${active.id}/approval-otp/resend`);
+      toast.success("OTP resent to your registered mobile number");
+      setOtpResent(true);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Could not resend OTP");
     } finally { setBusy(false); }
   };
 
@@ -193,12 +208,30 @@ export default function CustomerPage() {
                     <h3 className="font-display font-black text-lg uppercase">Approval needed</h3>
                     <p className="text-sm mt-1">{active.approval_reason}</p>
                     <p className="font-mono text-sm font-bold mt-2">Extra cost: ₹{active.extra_cost}</p>
+                    <p className="text-xs text-zinc-600 mt-3">An OTP was sent to your registered mobile number. Enter it below to approve.</p>
+                    <div className="flex gap-2 mt-3">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={otpVal}
+                        onChange={e => setOtpVal(e.target.value.replace(/\D/g, ""))}
+                        className="border border-zinc-400 px-3 py-2 font-mono text-sm w-40 focus:outline-none focus:border-orange-500"
+                      />
+                      <button
+                        data-testid="approve-work-btn"
+                        onClick={approve}
+                        disabled={busy || otpVal.length < 6}
+                        className="bg-black hover:bg-zinc-800 text-white font-display font-black uppercase tracking-widest px-5 py-2 transition-colors disabled:opacity-50"
+                      >Approve →</button>
+                    </div>
                     <button
-                      data-testid="approve-work-btn"
-                      onClick={approve}
+                      onClick={resendOtp}
                       disabled={busy}
-                      className="mt-4 bg-black hover:bg-zinc-800 text-white font-display font-black uppercase tracking-widest px-6 py-3 transition-colors disabled:opacity-50"
-                    >Approve →</button>
+                      className="mt-2 text-xs font-mono text-zinc-500 hover:text-orange-500 underline disabled:opacity-50"
+                    >{otpResent ? "OTP resent ✓" : "Didn't get OTP? Resend"}</button>
                   </div>
                 </div>
               </section>
