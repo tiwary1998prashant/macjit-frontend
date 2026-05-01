@@ -5,7 +5,7 @@ import api from "../lib/api";
 import { StatusPill } from "../components/StatusPill";
 import { StatCard } from "../components/StatCard";
 import { NotificationBell } from "../components/NotificationBell";
-import { LogOut, Wrench, AlertTriangle, PackageX, Clock, Plus, Trash, Upload, FileSpreadsheet, Mail, ReceiptText, Undo2, Search, Check, X as XIcon, ShoppingCart, Wrench as WrenchIcon, ExternalLink } from "lucide-react";
+import { LogOut, Wrench, AlertTriangle, PackageX, Clock, Plus, Trash, Upload, FileSpreadsheet, Mail, ReceiptText, Undo2, Search, Check, X as XIcon, ShoppingCart, Wrench as WrenchIcon, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import MacJitLogo from "../components/MacJitLogo";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip } from "recharts";
@@ -18,6 +18,8 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [alerts, setAlerts] = useState({ low_stock: [], out_of_stock: [], fifo: [] });
+  const [bSearch, setBSearch] = useState("");
+  const [bPage, setBPage] = useState(1);
   const [tick, setTick] = useState(0);
 
   const load = async () => {
@@ -62,7 +64,7 @@ export default function AdminPage() {
             <TabsTrigger data-testid="tab-bookings" value="bookings" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Bookings</TabsTrigger>
             <TabsTrigger data-testid="tab-transactions" value="transactions" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Transactions</TabsTrigger>
             <TabsTrigger data-testid="tab-refunds" value="refunds" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Refunds</TabsTrigger>
-            <TabsTrigger data-testid="tab-pricing" value="pricing" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Pricing</TabsTrigger>
+            <TabsTrigger data-testid="tab-services" value="services" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Services</TabsTrigger>
             <TabsTrigger data-testid="tab-customers" value="customers" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Customers</TabsTrigger>
             <TabsTrigger data-testid="tab-staff" value="staff" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Staff</TabsTrigger>
             <TabsTrigger data-testid="tab-enquiries" value="enquiries" className="rounded-none data-[state=active]:bg-orange-500 data-[state=active]:text-black font-mono text-xs uppercase tracking-widest">Enquiries</TabsTrigger>
@@ -131,22 +133,55 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="bookings" className="mt-6">
-            <div className="border border-zinc-800 bg-zinc-900/40 p-6 space-y-2">
-              {bookings.map((b) => (
-                <div key={b.id} className="flex items-center justify-between border-b border-zinc-800 py-3 last:border-0">
-                  <div>
-                    <p className="font-display font-bold">{b.plate_number} <span className="text-zinc-500 text-sm font-normal">· {b.customer_name}</span></p>
-                    <p className="font-mono text-xs text-zinc-500">{b.car_make} {b.car_model} · {b.service_type}{b.bay_name ? ` · ${b.bay_name}` : ""}{b.mechanic_name ? ` · ${b.mechanic_name}` : ""}{b.bill_amount ? ` · ₹${b.bill_amount}` : ""}</p>
+            {(() => {
+              const BPS = 10;
+              const q = bSearch.trim().toLowerCase();
+              const fb = q ? bookings.filter(b => (b.plate_number||"").toLowerCase().includes(q)||(b.customer_name||"").toLowerCase().includes(q)||(b.service_type||"").toLowerCase().includes(q)) : bookings;
+              const bTotal = Math.max(1, Math.ceil(fb.length / BPS));
+              const bSafe = Math.min(bPage, bTotal);
+              const bPaged = fb.slice((bSafe-1)*BPS, bSafe*BPS);
+              return (
+                <div className="border border-zinc-800 bg-zinc-900/40 p-6">
+                  <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Bookings · {fb.length}</p>
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+                      <input value={bSearch} onChange={e=>{setBSearch(e.target.value);setBPage(1);}} placeholder="Plate / customer / service…" className="bg-zinc-950 border border-zinc-700 pl-7 pr-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-orange-500 outline-none w-52" />
+                      {bSearch && <button onClick={()=>{setBSearch("");setBPage(1);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"><XIcon className="w-3 h-3"/></button>}
+                    </div>
                   </div>
-                  <StatusPill status={b.status} />
+                  <div className="space-y-2">
+                    {bPaged.map((b) => (
+                      <div key={b.id} className="flex items-center justify-between border-b border-zinc-800 py-3 last:border-0">
+                        <div>
+                          <p className="font-display font-bold">{b.plate_number} <span className="text-zinc-500 text-sm font-normal">· {b.customer_name}</span></p>
+                          <p className="font-mono text-xs text-zinc-500">{b.car_make} {b.car_model} · {b.service_type}{b.bay_name ? ` · ${b.bay_name}` : ""}{b.mechanic_name ? ` · ${b.mechanic_name}` : ""}{b.bill_amount ? ` · ₹${b.bill_amount}` : ""}</p>
+                        </div>
+                        <StatusPill status={b.status} />
+                      </div>
+                    ))}
+                    {fb.length === 0 && <p className="text-sm text-zinc-500 py-4">{bSearch ? "No bookings match." : "No bookings yet."}</p>}
+                  </div>
+                  {bTotal > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+                      <span className="font-mono text-[10px] text-zinc-500">Page {bSafe} of {bTotal}</span>
+                      <div className="flex gap-1">
+                        <button onClick={()=>setBPage(p=>Math.max(1,p-1))} disabled={bSafe===1} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5"/></button>
+                        {Array.from({length:bTotal},(_,i)=>i+1).map(n=>(
+                          <button key={n} onClick={()=>setBPage(n)} className={`px-2.5 py-1 font-mono text-[10px] border ${n===bSafe?"bg-orange-500 border-orange-500 text-black font-bold":"border-zinc-700 text-zinc-400 hover:border-zinc-500"}`}>{n}</button>
+                        ))}
+                        <button onClick={()=>setBPage(p=>Math.min(bTotal,p+1))} disabled={bSafe===bTotal} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5"/></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="transactions" className="mt-6"><TransactionsTab /></TabsContent>
           <TabsContent value="refunds" className="mt-6"><RefundsTab onChange={load} /></TabsContent>
-          <TabsContent value="pricing" className="mt-6"><PricingTab /></TabsContent>
+          <TabsContent value="services" className="mt-6"><ServicesTab /></TabsContent>
           <TabsContent value="customers" className="mt-6"><CustomersTab /></TabsContent>
           <TabsContent value="staff" className="mt-6"><StaffTab /></TabsContent>
           <TabsContent value="enquiries" className="mt-6"><EnquiriesTab /></TabsContent>
@@ -158,17 +193,29 @@ export default function AdminPage() {
 }
 
 const InventoryTab = ({ inventory, onChange }) => {
+  const [invSearch, setInvSearch] = useState("");
+  const [invPage, setInvPage] = useState(1);
+  const INV_PS = 10;
+  const filtInv = invSearch.trim() ? inventory.filter(i => (i.name||"").toLowerCase().includes(invSearch.toLowerCase())||(i.sku||"").toLowerCase().includes(invSearch.toLowerCase())||(i.category||"").toLowerCase().includes(invSearch.toLowerCase())) : inventory;
+  const invTotal = Math.max(1, Math.ceil(filtInv.length / INV_PS));
+  const invSafe = Math.min(invPage, invTotal);
+  const invPaged = filtInv.slice((invSafe-1)*INV_PS, invSafe*INV_PS);
   return (
     <div className="border border-zinc-800 bg-zinc-900/40 p-6">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Stock · {inventory.length} items</p>
-        <div className="flex items-center gap-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Stock · {filtInv.length} items</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none"/>
+            <input value={invSearch} onChange={e=>{setInvSearch(e.target.value);setInvPage(1);}} placeholder="Name / SKU / category…" className="bg-zinc-950 border border-zinc-700 pl-7 pr-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-orange-500 outline-none w-48"/>
+            {invSearch && <button onClick={()=>{setInvSearch("");setInvPage(1);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"><XIcon className="w-3 h-3"/></button>}
+          </div>
           <BulkUploadInventory onDone={onChange} />
           <AddInventoryDialog onDone={onChange} />
         </div>
       </div>
       <div className="space-y-2">
-        {inventory.map((i) => {
+        {invPaged.map((i) => {
           const isOut = i.stock <= 0;
           const isLow = !isOut && i.stock <= (i.low_stock_threshold || 5);
           return (
@@ -188,7 +235,20 @@ const InventoryTab = ({ inventory, onChange }) => {
             </div>
           );
         })}
+        {filtInv.length === 0 && <p className="text-sm text-zinc-500 py-4">{invSearch ? "No items match." : "No inventory yet."}</p>}
       </div>
+      {invTotal > 1 && (
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+          <span className="font-mono text-[10px] text-zinc-500">Page {invSafe} of {invTotal}</span>
+          <div className="flex gap-1">
+            <button onClick={()=>setInvPage(p=>Math.max(1,p-1))} disabled={invSafe===1} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5"/></button>
+            {Array.from({length:invTotal},(_,i)=>i+1).map(n=>(
+              <button key={n} onClick={()=>setInvPage(n)} className={`px-2.5 py-1 font-mono text-[10px] border ${n===invSafe?"bg-orange-500 border-orange-500 text-black font-bold":"border-zinc-700 text-zinc-400 hover:border-zinc-500"}`}>{n}</button>
+            ))}
+            <button onClick={()=>setInvPage(p=>Math.min(invTotal,p+1))} disabled={invSafe===invTotal} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5"/></button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -309,39 +369,12 @@ const AddInventoryDialog = ({ onDone }) => {
   );
 };
 
-const PricingTab = () => {
-  const [items, setItems] = useState([]);
-  const load = () => api.get("/pricing").then((r) => setItems(r.data));
-  useEffect(() => { load(); }, []);
-  const save = async (st, val) => {
-    await api.post("/pricing", { service_type: st, base_price: parseFloat(val) || 0 });
-    toast.success("Saved"); load();
-  };
-  return (
-    <div className="border border-zinc-800 bg-zinc-900/40 p-6">
-      <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-4">Service base prices · charged before parts & extras</p>
-      <div className="space-y-2">
-        {items.map((p) => (
-          <div key={p.service_type} data-testid={`price-row-${p.service_type}`} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 px-4 py-3">
-            <div>
-              <p className="font-display font-bold uppercase">{p.service_type.replace("-", " ")}</p>
-              {p.default && <p className="font-mono text-[10px] text-zinc-500">default · not yet customised</p>}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-zinc-500">₹</span>
-              <input data-testid={`price-input-${p.service_type}`} type="number" defaultValue={p.base_price} onBlur={(e) => save(p.service_type, e.target.value)} className="w-24 bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-right" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const CustomersTab = () => {
   const [list, setList] = useState([]);
   const [sel, setSel] = useState(null);
   const [hist, setHist] = useState(null);
+  const [custPage, setCustPage] = useState(1);
+  const custTotal = Math.max(1, Math.ceil(list.length / 10));
   useEffect(() => { api.get("/customers").then((r) => setList(r.data)); }, []);
   const open = async (c) => {
     setSel(c);
@@ -353,8 +386,8 @@ const CustomersTab = () => {
     <div className="grid lg:grid-cols-2 gap-6">
       <div className="border border-zinc-800 bg-zinc-900/40 p-6">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-4">All customers · {list.length}</p>
-        <div className="space-y-2 max-h-[600px] overflow-y-auto">
-          {list.map((c) => (
+        <div className="space-y-2">
+          {list.slice((custPage-1)*10, custPage*10).map((c) => (
             <button key={c.id} data-testid={`customer-${c.id}`} onClick={() => open(c)} className={`w-full text-left border ${sel?.id === c.id ? "border-orange-500" : "border-zinc-800"} bg-zinc-950 hover:border-zinc-600 px-4 py-3 transition-colors`}>
               <div className="flex items-center justify-between">
                 <div>
@@ -366,6 +399,18 @@ const CustomersTab = () => {
             </button>
           ))}
         </div>
+        {custTotal > 1 && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+            <span className="font-mono text-[10px] text-zinc-500">Page {Math.min(custPage,custTotal)} of {custTotal}</span>
+            <div className="flex gap-1">
+              <button onClick={()=>setCustPage(p=>Math.max(1,p-1))} disabled={custPage<=1} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5"/></button>
+              {Array.from({length:custTotal},(_,i)=>i+1).map(n=>(
+                <button key={n} onClick={()=>setCustPage(n)} className={`px-2.5 py-1 font-mono text-[10px] border ${n===Math.min(custPage,custTotal)?"bg-orange-500 border-orange-500 text-black font-bold":"border-zinc-700 text-zinc-400 hover:border-zinc-500"}`}>{n}</button>
+              ))}
+              <button onClick={()=>setCustPage(p=>Math.min(custTotal,p+1))} disabled={custPage>=custTotal} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5"/></button>
+            </div>
+          </div>
+        )}
       </div>
       <div className="border border-zinc-800 bg-zinc-900/40 p-6">
         {!hist ? (
@@ -401,6 +446,8 @@ const CustomersTab = () => {
 
 const EnquiriesTab = () => {
   const [list, setList] = useState([]);
+  const [enqPage, setEnqPage] = useState(1);
+  const ENQ_PS = 8;
   const load = () => api.get("/enquiries").then((r) => setList(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
@@ -418,8 +465,9 @@ const EnquiriesTab = () => {
       {list.length === 0 ? (
         <p className="font-mono text-xs text-zinc-500 text-center py-8">No enquiries yet. They'll appear here when customers fill the landing-page form.</p>
       ) : (
+        <>
         <div className="space-y-2">
-          {list.map((e) => (
+          {list.slice((enqPage-1)*ENQ_PS, enqPage*ENQ_PS).map((e) => (
             <div key={e.id} data-testid={`enq-row-${e.id}`} className="bg-zinc-950 border border-zinc-800 p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
@@ -447,6 +495,19 @@ const EnquiriesTab = () => {
             </div>
           ))}
         </div>
+        {Math.ceil(list.length/ENQ_PS) > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+            <span className="font-mono text-[10px] text-zinc-500">Page {Math.min(enqPage,Math.ceil(list.length/ENQ_PS))} of {Math.ceil(list.length/ENQ_PS)}</span>
+            <div className="flex gap-1">
+              <button onClick={()=>setEnqPage(p=>Math.max(1,p-1))} disabled={enqPage<=1} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5"/></button>
+              {Array.from({length:Math.ceil(list.length/ENQ_PS)},(_,i)=>i+1).map(n=>(
+                <button key={n} onClick={()=>setEnqPage(n)} className={`px-2.5 py-1 font-mono text-[10px] border ${n===Math.min(enqPage,Math.ceil(list.length/ENQ_PS))?"bg-orange-500 border-orange-500 text-black font-bold":"border-zinc-700 text-zinc-400 hover:border-zinc-500"}`}>{n}</button>
+              ))}
+              <button onClick={()=>setEnqPage(p=>Math.min(Math.ceil(list.length/ENQ_PS),p+1))} disabled={enqPage>=Math.ceil(list.length/ENQ_PS)} className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5"/></button>
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
@@ -692,22 +753,150 @@ const HRAdminTab = () => {
 
 
 // ---------- Transactions tab (Paytm-style unified history) ----------
+
+const ServicesTab = () => {
+  const [services, setServices] = useState([]);
+  const [form, setForm] = useState({ key: "", name: "", duration_min: 60, base_price: 800, active: true });
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    const r = await api.get("/services");
+    setServices(r.data);
+  };
+  useEffect(() => { load(); }, []);
+
+  const fmtDuration = (min) => {
+    if (!min) return "—";
+    const h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? `${h}h${m > 0 ? " " + m + "m" : ""}` : `${m}m`;
+  };
+
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true);
+    try {
+      if (editing) {
+        await api.patch(`/services/${editing.id}`, { name: form.name, duration_min: parseInt(form.duration_min), base_price: parseFloat(form.base_price), active: form.active });
+        toast.success("Service updated");
+      } else {
+        await api.post("/services", { ...form, duration_min: parseInt(form.duration_min), base_price: parseFloat(form.base_price) });
+        toast.success("Service created");
+      }
+      setEditing(null); setForm({ key: "", name: "", duration_min: 60, base_price: 800, active: true });
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  const startEdit = (s) => {
+    setEditing(s);
+    setForm({ key: s.key, name: s.name, duration_min: s.duration_min, base_price: s.base_price, active: s.active });
+  };
+
+  const deleteService = async (id) => {
+    if (!window.confirm("Delete this service?")) return;
+    await api.delete(`/services/${id}`);
+    toast.success("Deleted");
+    load();
+  };
+
+  const toggleActive = async (s) => {
+    await api.patch(`/services/${s.id}`, { active: !s.active });
+    load();
+  };
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6">
+      {/* Form */}
+      <div className="border border-zinc-800 bg-zinc-900/40 p-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-orange-500 mb-1">{editing ? "Edit service" : "Add service"}</p>
+        <form onSubmit={submit} className="space-y-3 mt-3">
+          {!editing && (
+            <input required placeholder="Key (e.g. oil-change)" value={form.key} onChange={(e) => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/\s+/g, "-") }))}
+              className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+          )}
+          <input required placeholder="Display name (e.g. Oil & Filter Change)" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+            className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="font-mono text-[10px] text-zinc-500 block mb-1">Duration (min)</label>
+              <input required type="number" min="1" value={form.duration_min} onChange={(e) => setForm(f => ({ ...f, duration_min: e.target.value }))}
+                className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="font-mono text-[10px] text-zinc-500 block mb-1">Base price (₹)</label>
+              <input required type="number" min="0" step="0.01" value={form.base_price} onChange={(e) => setForm(f => ({ ...f, base_price: e.target.value }))}
+                className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.active} onChange={(e) => setForm(f => ({ ...f, active: e.target.checked }))} className="accent-orange-500" />
+            <span className="font-mono text-xs text-zinc-400">Active (visible in booking)</span>
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="flex-1 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black font-mono text-xs uppercase tracking-widest font-bold py-2">
+              {busy ? "Saving..." : editing ? "Update" : "Add Service"}
+            </button>
+            {editing && (
+              <button type="button" onClick={() => { setEditing(null); setForm({ key: "", name: "", duration_min: 60, base_price: 800, active: true }); }}
+                className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs">Cancel</button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* List */}
+      <div className="lg:col-span-2 border border-zinc-800 bg-zinc-900/40 p-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-4">Garage Services ({services.length})</p>
+        <div className="space-y-2">
+          {services.map((s) => (
+            <div key={s.id} className={`flex items-center justify-between border px-4 py-3 ${s.active ? "border-zinc-800 bg-zinc-950" : "border-zinc-800/40 bg-zinc-950/40 opacity-60"}`}>
+              <div>
+                <p className="font-bold text-sm">{s.name}</p>
+                <p className="font-mono text-[10px] text-zinc-500">{s.key} · {fmtDuration(s.duration_min)} · ₹{s.base_price}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => toggleActive(s)} className={`font-mono text-[10px] uppercase tracking-widest px-2 py-1 border ${s.active ? "border-green-700 text-green-400 hover:bg-green-900/20" : "border-zinc-700 text-zinc-500 hover:bg-zinc-800"}`}>
+                  {s.active ? "Active" : "Inactive"}
+                </button>
+                <button onClick={() => startEdit(s)} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-orange-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button onClick={() => deleteService(s.id)} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-red-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TransactionsTab = () => {
   const [type, setType] = useState("all");
   const [q, setQ] = useState("");
-  const [data, setData] = useState({ transactions: [], total_amount: 0, count: 0, service_count: 0, shop_count: 0 });
+  const [period, setPeriod] = useState(""); // today | week | month | custom | ""
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [data, setData] = useState({ transactions: [], total_amount: 0, count: 0, service_count: 0, shop_count: 0, refund_count: 0, refund_amount: 0 });
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const r = await api.get(`/admin/transactions?type=${type}&q=${encodeURIComponent(q)}`);
+      let url = `/admin/transactions?type=${type}&q=${encodeURIComponent(q)}`;
+      if (period && period !== "custom") url += `&period=${period}`;
+      if (period === "custom" && dateFrom) url += `&date_from=${dateFrom}`;
+      if (period === "custom" && dateTo) url += `&date_to=${dateTo}`;
+      const r = await api.get(url);
       setData(r.data);
     } catch (e) { toast.error("Failed to load transactions"); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [type]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [type, period]);
 
   const fmtTime = (s) => {
     if (!s) return "—";
@@ -749,6 +938,26 @@ const TransactionsTab = () => {
                   className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest font-bold transition-colors ${type === v ? "bg-orange-500 text-black" : "text-zinc-400 hover:text-orange-500"}`}
                 >{lbl}</button>
               ))}
+            </div>
+            {/* Date period filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-zinc-950 border border-zinc-800">
+                {[["", "All Time"], ["today", "Today"], ["week", "7 Days"], ["month", "30 Days"], ["custom", "Custom"]].map(([v, lbl]) => (
+                  <button key={v} onClick={() => { setPeriod(v); if (v !== "custom") { setDateFrom(""); setDateTo(""); }}}
+                    className={`px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest font-bold transition-colors ${period === v ? "bg-orange-500 text-black" : "text-zinc-400 hover:text-orange-500"}`}
+                  >{lbl}</button>
+                ))}
+              </div>
+              {period === "custom" && (
+                <div className="flex items-center gap-1">
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                    className="bg-zinc-950 border border-zinc-800 px-2 py-1.5 font-mono text-xs text-zinc-100 focus:border-orange-500 outline-none" />
+                  <span className="text-zinc-500 text-xs">→</span>
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                    className="bg-zinc-950 border border-zinc-800 px-2 py-1.5 font-mono text-xs text-zinc-100 focus:border-orange-500 outline-none" />
+                  <button onClick={load} className="bg-orange-500 hover:bg-orange-400 text-black font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1.5">Go</button>
+                </div>
+              )}
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />

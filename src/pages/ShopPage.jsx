@@ -19,6 +19,20 @@ export default function ShopPage() {
   const [page, setPage] = useState(1);
   const [cart, setCart] = useState([]); // [{id, name, sku, price, qty, stock}]
   const [customer, setCustomer] = useState({ name: "", phone: "" });
+              {/* Fitting & GST */}
+              <div className="border border-zinc-800 bg-zinc-900/20 p-3 space-y-2">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Fitting Charge & GST</p>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="font-mono text-[10px] text-zinc-500 block mb-1">Fitting (₹)</label>
+                    <input type="number" min="0" step="1" value={fittingCharge} onChange={(e) => setFittingCharge(e.target.value)} placeholder="0" className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="font-mono text-[10px] text-zinc-500 block mb-1">GST %</label>
+                    <input type="number" min="0" max="100" step="0.5" value={gstPercent} onChange={(e) => setGstPercent(e.target.value)} placeholder="0" className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 font-mono text-sm text-zinc-100 focus:border-orange-500 outline-none" />
+                  </div>
+                </div>
+              </div>
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [sales, setSales] = useState([]);
   const [stats, setStats] = useState({});
@@ -27,6 +41,10 @@ export default function ShopPage() {
   const [lastSale, setLastSale] = useState(null);
   const [refundFor, setRefundFor] = useState(null); // sale obj or null
   const [refundReason, setRefundReason] = useState("");
+  const [fittingCharge, setFittingCharge] = useState(0);
+  const [gstPercent, setGstPercent] = useState(0);
+  const [saleSearch, setSaleSearch] = useState("");
+  const [salePage, setSalePage] = useState(1);
 
   const load = async () => {
     const [inv, sl, st, rf] = await Promise.all([
@@ -37,7 +55,7 @@ export default function ShopPage() {
   };
   useEffect(() => { load(); }, []);
   useGarageWS(token, (e) => {
-    if (e.type === "SHOP_SALE" || (e.type || "").startsWith("REFUND_")) { load(); setTick((t) => t + 1); }
+    if (e.type === "SHOP_SALE" || e.type === "SHOP_PAYMENT_RECEIVED" || (e.type || "").startsWith("REFUND_")) { load(); setTick((t) => t + 1); if (e.type === "SHOP_PAYMENT_RECEIVED") { toast.success("Payment received! Invoice sent to customer via WhatsApp."); } }
   });
 
   const categories = useMemo(() => {
@@ -60,13 +78,31 @@ export default function ShopPage() {
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   useEffect(() => { setPage(1); }, [search, category]);
 
-  const cartTotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const cartSubtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const cartFitting = parseFloat(fittingCharge) || 0;
+  const cartGstPct = parseFloat(gstPercent) || 0;
+  const cartGstAmt = Math.round((cartSubtotal + cartFitting) * cartGstPct) / 100;
+  const cartTotal = cartSubtotal + cartFitting + cartGstAmt;
 
   const refundsBySale = useMemo(() => {
     const m = {};
     refunds.forEach((r) => { m[r.sale_id] = r; });
     return m;
   }, [refunds]);
+
+  const SALE_PAGE_SIZE = 10;
+  const filteredSales = useMemo(() => {
+    const q = saleSearch.trim().toLowerCase();
+    if (!q) return sales;
+    return sales.filter((s) =>
+      (s.customer_name || "").toLowerCase().includes(q) ||
+      (s.customer_phone || "").includes(q) ||
+      s.id.toLowerCase().includes(q)
+    );
+  }, [sales, saleSearch]);
+  const saleTotalPages = Math.max(1, Math.ceil(filteredSales.length / SALE_PAGE_SIZE));
+  const safeSalePage = Math.min(salePage, saleTotalPages);
+  const pagedSales = filteredSales.slice((safeSalePage - 1) * SALE_PAGE_SIZE, safeSalePage * SALE_PAGE_SIZE);
 
   const addToCart = (it) => {
     setCart((prev) => {
@@ -89,6 +125,8 @@ export default function ShopPage() {
         customer_phone: customer.phone,
         items: cart.map((c) => ({ inventory_id: c.id, qty: c.qty })),
         payment_method: paymentMethod,
+          fitting_charge: cartFitting,
+          gst_percent: cartGstPct,
       });
       toast.success(`Sale ₹${r.data.total} ${paymentMethod === "cash" ? "received" : "link sent"}`);
       setLastSale(r.data);
@@ -250,12 +288,30 @@ export default function ShopPage() {
 
         {/* Recent sales + refund actions */}
         <div className="border border-zinc-800 bg-zinc-900/40 p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-3">Recent counter sales</p>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">Counter sales ({filteredSales.length})</p>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+              <input
+                type="text"
+                value={saleSearch}
+                onChange={(e) => { setSaleSearch(e.target.value); setSalePage(1); }}
+                placeholder="Search customer / phone / ID…"
+                className="bg-zinc-950 border border-zinc-700 pl-7 pr-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-orange-500 outline-none w-56"
+              />
+              {saleSearch && (
+                <button onClick={() => { setSaleSearch(""); setSalePage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="space-y-2">
-            {sales.slice(0, 15).map((s) => {
+            {pagedSales.map((s) => {
               const r = refundsBySale[s.id];
               const status = r?.status || s.refund_status;
-              const canRefund = s.paid && !status;
+              const daysSince = (Date.now() - new Date(s.created_at).getTime()) / (1000 * 60 * 60 * 24);
+              const canRefund = s.paid && !status && daysSince <= 5;
               return (
                 <div key={s.id} className="bg-zinc-950 border border-zinc-800 p-3 flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -278,8 +334,31 @@ export default function ShopPage() {
                 </div>
               );
             })}
-            {sales.length === 0 && <p className="text-sm text-zinc-500">No counter sales yet</p>}
+            {filteredSales.length === 0 && (
+              <p className="text-sm text-zinc-500">{saleSearch ? "No sales match your search." : "No counter sales yet."}</p>
+            )}
           </div>
+          {saleTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+              <span className="font-mono text-[10px] text-zinc-500">Page {safeSalePage} of {saleTotalPages}</span>
+              <div className="flex gap-1">
+                <button onClick={() => setSalePage((p) => Math.max(1, p - 1))} disabled={safeSalePage === 1}
+                  className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed">
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                {Array.from({ length: saleTotalPages }, (_, i) => i + 1).map((n) => (
+                  <button key={n} onClick={() => setSalePage(n)}
+                    className={`px-2.5 py-1 font-mono text-[10px] border ${n === safeSalePage ? "bg-orange-500 border-orange-500 text-black font-bold" : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white"}`}>
+                    {n}
+                  </button>
+                ))}
+                <button onClick={() => setSalePage((p) => Math.min(saleTotalPages, p + 1))} disabled={safeSalePage === saleTotalPages}
+                  className="p-1.5 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

@@ -18,17 +18,19 @@ export default function ReceptionPage() {
   const [mechanics, setMechanics] = useState([]);
   const [bays, setBays] = useState([]);
   const [stats, setStats] = useState({});
+  const [services, setServices] = useState([]);
   const [tick, setTick] = useState(0);
 
   const load = async () => {
-    const [b, c, m, ba, s] = await Promise.all([
+    const [b, c, m, ba, s, sv] = await Promise.all([
       api.get("/bookings"),
       api.get("/users/by-role/customer"),
       api.get("/users/by-role/mechanic"),
       api.get("/bays"),
       api.get("/admin/stats"),
+      api.get("/services/active"),
     ]);
-    setBookings(b.data); setCustomers(c.data); setMechanics(m.data); setBays(ba.data); setStats(s.data);
+    setBookings(b.data); setCustomers(c.data); setMechanics(m.data); setBays(ba.data); setStats(s.data); setServices(sv.data);
   };
 
   useEffect(() => { load(); }, []);
@@ -54,7 +56,7 @@ export default function ReceptionPage() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          <NewBookingCard customers={customers} onCreated={load} />
+          <NewBookingCard customers={customers} services={services} onCreated={load} />
           <div className="lg:col-span-2 border border-zinc-800 bg-zinc-900/40 p-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-4">Live queue</p>
             <div className="space-y-3 max-h-[640px] overflow-y-auto">
@@ -89,7 +91,7 @@ const Header = ({ user, onLogout, tick }) => (
   </header>
 );
 
-const NewBookingCard = ({ customers, onCreated }) => {
+const NewBookingCard = ({ customers, services = [], onCreated }) => {
   const [form, setForm] = useState({ customer_name: "", customer_phone: "", car_make: "", car_model: "", plate_number: "", service_type: "general", notes: "" });
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
@@ -115,15 +117,22 @@ const NewBookingCard = ({ customers, onCreated }) => {
         <input data-testid="booking-model" required placeholder="Model (i20)" value={form.car_model} onChange={(e) => upd("car_model", e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 font-mono text-sm focus:border-orange-500 outline-none" />
         <input data-testid="booking-plate" required placeholder="Plate (KA-05-MN-2024)" value={form.plate_number} onChange={(e) => upd("plate_number", e.target.value.toUpperCase())} className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 font-mono text-sm focus:border-orange-500 outline-none" />
         <Select value={form.service_type} onValueChange={(v) => upd("service_type", v)}>
-          <SelectTrigger data-testid="booking-service" className="bg-zinc-950 border-zinc-800"><SelectValue /></SelectTrigger>
+          <SelectTrigger data-testid="booking-service" className="bg-zinc-950 border-zinc-800"><SelectValue placeholder="Select service" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="general">General Service · 2h</SelectItem>
-            <SelectItem value="oil-change">Oil & Filter Change · 45m</SelectItem>
-            <SelectItem value="full-service">Full Service · 3h 30m</SelectItem>
-            <SelectItem value="ac-service">AC Service · 1h 30m</SelectItem>
-            <SelectItem value="alignment">Wheel Alignment & Balancing · 1h</SelectItem>
-            <SelectItem value="brake">Brake Service · 1h 15m</SelectItem>
-            <SelectItem value="engine">Engine Repair / Diagnostics · 4h</SelectItem>
+            {services.length > 0 ? services.map((s) => {
+              const h = s.duration_min >= 60 ? `${Math.floor(s.duration_min/60)}h${s.duration_min%60 > 0 ? " " + s.duration_min%60 + "m" : ""}` : `${s.duration_min}m`;
+              return <SelectItem key={s.key} value={s.key}>{s.name} · {h} · ₹{s.base_price}</SelectItem>;
+            }) : (
+              <>
+                <SelectItem value="general">General Service · 2h</SelectItem>
+                <SelectItem value="oil-change">Oil & Filter Change · 45m</SelectItem>
+                <SelectItem value="full-service">Full Service · 3h 30m</SelectItem>
+                <SelectItem value="ac-service">AC Service · 1h 30m</SelectItem>
+                <SelectItem value="alignment">Wheel Alignment & Balancing · 1h</SelectItem>
+                <SelectItem value="brake">Brake Service · 1h 15m</SelectItem>
+                <SelectItem value="engine">Engine Repair / Diagnostics · 4h</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
         <textarea placeholder="Notes" value={form.notes} onChange={(e) => upd("notes", e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 font-mono text-sm" rows={2} />
